@@ -21,27 +21,27 @@
             <el-menu-item index="purchase">
               <el-icon><Document /></el-icon>
               <span>采购审批</span>
-              <el-badge :value="8" class="menu-badge" />
+              <el-badge :value="purchaseCount" class="menu-badge" />
             </el-menu-item>
             <el-menu-item index="contract">
               <el-icon><Tickets /></el-icon>
               <span>合同审批</span>
-              <el-badge :value="3" class="menu-badge" />
+              <el-badge :value="contractCount" class="menu-badge" />
             </el-menu-item>
             <el-menu-item index="payment">
               <el-icon><Wallet /></el-icon>
               <span>付款结算</span>
-              <el-badge :value="5" class="menu-badge" />
+              <el-badge :value="paymentCount" class="menu-badge" />
             </el-menu-item>
             <el-menu-item index="price">
               <el-icon><PriceTag /></el-icon>
               <span>调价审批</span>
-              <el-badge :value="2" class="menu-badge" />
+              <el-badge :value="priceCount" class="menu-badge" />
             </el-menu-item>
             <el-menu-item index="supplier">
               <el-icon><OfficeBuilding /></el-icon>
               <span>供应商准入</span>
-              <el-badge :value="4" class="menu-badge" />
+              <el-badge :value="supplierCount" class="menu-badge" />
             </el-menu-item>
           </el-menu>
         </div>
@@ -52,13 +52,14 @@
             <el-button type="primary" link size="small">全部</el-button>
           </div>
           <div class="todo-list">
-            <div v-for="item in todoList" :key="item.id" class="todo-item">
+            <div v-for="item in filteredTodos" :key="item.id" class="todo-item">
               <div class="todo-title">{{ item.title }}</div>
               <div class="todo-meta">
                 <span class="todo-type">{{ item.type }}</span>
                 <span class="todo-time">{{ item.time }}</span>
               </div>
             </div>
+            <el-empty v-if="filteredTodos.length === 0" description="暂无待办事项" :image-size="60" />
           </div>
         </div>
       </el-col>
@@ -157,18 +158,35 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Plus, Setting, Document, Tickets, Wallet, PriceTag, OfficeBuilding, Edit, View, MagicStick, User, UserFilled, CircleCheck, Finish } from '@element-plus/icons-vue'
+import { useStore } from '../store'
+
+const { state } = useStore()
 
 const activeCategory = ref('purchase')
 
-const todoList = ref([
-  { id: 1, title: '智能手机批量采购申请', type: '采购审批', time: '10分钟前' },
-  { id: 2, title: '2026年度供应商框架合同', type: '合同审批', time: '1小时前' },
-  { id: 3, title: '6月供应商货款结算', type: '付款结算', time: '2小时前' },
-  { id: 4, title: '电子产品价格调整申请', type: '调价审批', time: '今天上午' },
-  { id: 5, title: '新供应商准入审核', type: '供应商准入', time: '昨天' }
-])
+const todoList = computed(() => state.approvalTodos)
+
+const filteredTodos = computed(() => {
+  if (activeCategory.value === 'all') return todoList.value
+  const typeMap = {
+    purchase: '采购审批',
+    contract: '合同审批',
+    payment: '付款结算',
+    price: '调价审批',
+    supplier: '供应商准入'
+  }
+  const type = typeMap[activeCategory.value]
+  if (!type) return todoList.value
+  return todoList.value.filter(t => t.type === type)
+})
+
+const purchaseCount = computed(() => state.approvalTodos.filter(t => t.type === '采购审批').length)
+const contractCount = computed(() => state.approvalTodos.filter(t => t.type === '合同审批').length)
+const paymentCount = computed(() => state.approvalTodos.filter(t => t.type === '付款结算').length)
+const priceCount = computed(() => state.approvalTodos.filter(t => t.type === '调价审批').length)
+const supplierCount = computed(() => state.approvalTodos.filter(t => t.type === '供应商准入').length)
 
 const ruleList = ref([
   { ruleName: '大额采购自动加签', ruleType: '金额规则', condition: '采购金额 > 10万元', action: '自动加签财务总监', enabled: true },

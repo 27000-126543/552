@@ -34,9 +34,14 @@
         <h2 class="login-title">欢迎登录</h2>
         <p class="login-subtitle">请输入您的账号信息</p>
         
-        <el-form ref="loginForm" :model="loginForm" :rules="loginRules" class="login-form">
+        <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" class="login-form">
           <el-form-item prop="username">
-            <el-input v-model="loginForm.username" placeholder="请输入账号" size="large">
+            <el-input
+              v-model="loginForm.username"
+              placeholder="请输入账号（如 admin）"
+              size="large"
+              clearable
+            >
               <template #prefix>
                 <el-icon><User /></el-icon>
               </template>
@@ -44,7 +49,14 @@
           </el-form-item>
           
           <el-form-item prop="password">
-            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" size="large" show-password>
+            <el-input
+              v-model="loginForm.password"
+              type="password"
+              placeholder="请输入密码（如 123456）"
+              size="large"
+              show-password
+              @keyup.enter="handleLogin"
+            >
               <template #prefix>
                 <el-icon><Lock /></el-icon>
               </template>
@@ -54,16 +66,30 @@
           <el-form-item>
             <div class="login-options">
               <el-checkbox v-model="loginForm.remember">记住密码</el-checkbox>
-              <a href="#" class="forgot-password">忘记密码？</a>
+              <a href="#" class="forgot-password" @click.prevent="showTip">忘记密码？</a>
             </div>
           </el-form-item>
           
           <el-form-item>
-            <el-button type="primary" size="large" class="login-btn" @click="handleLogin" :loading="loading">
+            <el-button
+              type="primary"
+              size="large"
+              class="login-btn"
+              @click="handleLogin"
+              :loading="loading"
+            >
               登 录
             </el-button>
           </el-form-item>
         </el-form>
+        
+        <el-alert
+          title="测试账号：admin / 123456"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-top: 16px"
+        />
         
         <div class="login-footer">
           <span>© 2026 智能供应链协同平台 版权所有</span>
@@ -77,33 +103,50 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useStore } from '../store'
 
 const router = useRouter()
-const loginForm = ref(null)
+const { actions } = useStore()
+
+const loginFormRef = ref(null)
 const loading = ref(false)
 
-const form = reactive({
+const loginForm = reactive({
   username: 'admin',
   password: '123456',
   remember: true
 })
 
-const rules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+const loginRules = {
+  username: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 2, max: 20, message: '账号长度在 2 到 20 个字符', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 4, max: 20, message: '密码长度在 4 到 20 个字符', trigger: 'blur' }
+  ]
 }
 
 const handleLogin = () => {
-  loginForm.value.validate((valid) => {
-    if (valid) {
-      loading.value = true
-      setTimeout(() => {
-        loading.value = false
-        ElMessage.success('登录成功')
-        router.push('/dashboard')
-      }, 1000)
+  if (!loginFormRef.value) return
+  loginFormRef.value.validate((valid) => {
+    if (!valid) {
+      ElMessage.warning('请检查账号密码输入是否正确')
+      return
     }
+    loading.value = true
+    setTimeout(() => {
+      actions.login(loginForm.username, loginForm.password)
+      loading.value = false
+      ElMessage.success(`欢迎回来，${loginForm.username}！`)
+      router.replace('/dashboard')
+    }, 800)
   })
+}
+
+const showTip = () => {
+  ElMessage.info('请联系系统管理员重置密码')
 }
 </script>
 
@@ -205,7 +248,7 @@ const handleLogin = () => {
 }
 
 .login-box {
-  width: 360px;
+  width: 380px;
 }
 
 .login-title {
@@ -246,7 +289,7 @@ const handleLogin = () => {
 }
 
 .login-footer {
-  margin-top: 40px;
+  margin-top: 32px;
   text-align: center;
   color: #c0c4cc;
   font-size: 12px;

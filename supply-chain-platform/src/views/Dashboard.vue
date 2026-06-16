@@ -13,7 +13,7 @@
           <el-radio-button label="quarter">本季度</el-radio-button>
           <el-radio-button label="year">本年</el-radio-button>
         </el-radio-group>
-        <el-button type="primary" :icon="Refresh" @click="refreshData">刷新数据</el-button>
+        <el-button type="primary" :icon="Refresh" @click="handleRefresh">刷新数据</el-button>
       </div>
     </div>
 
@@ -165,24 +165,33 @@
       <div class="chart-header">
         <span class="chart-title">SKU 库存明细</span>
         <div class="header-right">
-          <el-input v-model="skuSearch" placeholder="搜索SKU名称/编码" style="width: 240px" clearable>
+          <el-input v-model="skuKeyword" placeholder="搜索SKU名称/编码" style="width: 240px" clearable @clear="currentPage = 1" @input="handleSkuSearch">
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-button type="primary" link @click="drillDown">钻取分析</el-button>
+          <el-button type="primary" :disabled="!selectedSku" @click="openDrillDialog">钻取分析</el-button>
         </div>
       </div>
-      <el-table :data="skuList" style="width: 100%">
+      <el-table
+        ref="skuTableRef"
+        :data="pagedSkuList"
+        style="width: 100%"
+        highlight-current-row
+        @current-change="handleSkuRowChange"
+      >
+        <el-table-column type="index" label="#" width="60" />
         <el-table-column prop="skuCode" label="SKU编码" width="140" />
         <el-table-column prop="skuName" label="商品名称" min-width="200" />
         <el-table-column prop="category" label="品类" width="120" />
         <el-table-column prop="stock" label="库存数量" width="120" sortable>
           <template #default="{ row }">
-            <span :class="getStockClass(row.stock, row.safeStock)">{{ row.stock }}</span>
+            <span :class="getStockClass(row.stock, row.safeStock)">{{ row.stock.toLocaleString() }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="safeStock" label="安全库存" width="100" />
+        <el-table-column prop="safeStock" label="安全库存" width="100">
+          <template #default="{ row }">{{ row.safeStock.toLocaleString() }}</template>
+        </el-table-column>
         <el-table-column prop="stockValue" label="库存金额" width="120" sortable>
           <template #default="{ row }">
             ¥{{ (row.stockValue / 10000).toFixed(2) }}万
@@ -198,8 +207,8 @@
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
-          <template #default>
-            <el-button type="primary" link size="small">详情</el-button>
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="openDrillDialog(row)">钻取</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -207,25 +216,97 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="156"
-          layout="total, sizes, prev, pager, next, jumper"
+          :page-sizes="[5, 10, 20, 50]"
+          :total="filteredSkuCount"
+          layout="total, sizes, prev, pager, next"
+          @size-change="currentPage = 1"
         />
       </div>
     </div>
+
+    <el-dialog v-model="drillDialogVisible" title="SKU 钻取分析" width="900px" class="drill-dialog">
+      <div v-if="selectedSku" class="drill-content">
+        <div class="drill-header">
+          <div class="sku-info">
+            <div class="sku-name">{{ selectedSku.skuName }}</div>
+            <div class="sku-code">{{ selectedSku.skuCode }} · {{ selectedSku.category }}</div>
+          </div>
+          <div class="sku-stats">
+            <div class="stat-item">
+              <div class="num">{{ selectedSku.stock.toLocaleString() }}</div>
+              <div class="label">当前库存</div>
+            </div>
+            <div class="stat-item">
+              <div class="num">¥{{ (selectedSku.stockValue / 10000).toFixed(2) }}万</div>
+              <div class="label">库存金额</div>
+            </div>
+            <div class="stat-item">
+              <div class="num">{{ selectedSku.turnoverDays }}天</div>
+              <div class="label">周转天数</div>
+            </div>
+            <div class="stat-item">
+              <div class="num">{{ selectedSku.warehouse }}</div>
+              <div class="label">主仓库</div>
+            </div>
+          </div>
+        </div>
+
+        <el-row :gutter="16" class="drill-charts">
+          <el-col :span="12">
+            <div class="mini-chart-card">
+              <div class="mini-chart-title">库存趋势（近30天）</div>
+              <v-chart :option="stockTrendOption" autoresize class="mini-chart" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="mini-chart-card">
+              <div class="mini-chart-title">仓库库存分布</div>
+              <v-chart :option="warehouseDistOption" autoresize class="mini-chart" />
+            </div>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16" class="drill-charts">
+          <el-col :span="12">
+            <div class="mini-chart-card">
+              <div class="mini-chart-title">价格走势（近90天）</div>
+              <v-chart :option="priceTrendOption" autoresize class="mini-chart" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="mini-chart-card">
+              <div class="mini-chart-title">周转情况分析</div>
+              <v-chart :option="turnoverOption" autoresize class="mini-chart" />
+            </div>
+          </el-col>
+        </el-row>
+
+        <div class="drill-footer">
+          <el-button type="primary" @click="drillDialogVisible = false">关闭</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
+import { useStore } from '../store'
+import { ElMessage } from 'element-plus'
+
+const { state } = useStore()
 
 const timeRange = ref('week')
 const inventoryType = ref('amount')
 const priceCategory = ref('electronics')
-const skuSearch = ref('')
+const skuKeyword = ref('')
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(5)
+const selectedSku = ref(null)
+const drillDialogVisible = ref(false)
+const skuTableRef = ref(null)
+
 
 const inventoryOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -456,18 +537,23 @@ const regionOption = computed(() => ({
   }]
 }))
 
-const skuList = ref([
-  { skuCode: 'SKU-001', skuName: '智能手机 128G 黑色', category: '电子产品', stock: 2580, safeStock: 500, stockValue: 5160000, turnoverDays: 28, warehouse: '华东仓' },
-  { skuCode: 'SKU-002', skuName: '无线蓝牙耳机 Pro', category: '电子产品', stock: 5680, safeStock: 1000, stockValue: 1704000, turnoverDays: 22, warehouse: '华南仓' },
-  { skuCode: 'SKU-003', skuName: '进口牛奶 1L*12', category: '食品饮料', stock: 890, safeStock: 1000, stockValue: 89000, turnoverDays: 15, warehouse: '华北仓' },
-  { skuCode: 'SKU-004', skuName: '运动休闲外套 男款', category: '服装鞋帽', stock: 320, safeStock: 200, stockValue: 128000, turnoverDays: 45, warehouse: '华东仓' },
-  { skuCode: 'SKU-005', skuName: '智能扫地机器人', category: '家居用品', stock: 156, safeStock: 300, stockValue: 624000, turnoverDays: 60, warehouse: '西南仓' },
-  { skuCode: 'SKU-006', skuName: '保湿面霜 50ml', category: '美妆个护', stock: 2850, safeStock: 800, stockValue: 427500, turnoverDays: 35, warehouse: '华南仓' },
-  { skuCode: 'SKU-007', skuName: '平板电脑 256G WiFi版', category: '电子产品', stock: 680, safeStock: 400, stockValue: 2040000, turnoverDays: 42, warehouse: '华东仓' },
-  { skuCode: 'SKU-008', skuName: '有机坚果礼盒装', category: '食品饮料', stock: 1250, safeStock: 600, stockValue: 156250, turnoverDays: 20, warehouse: '华北仓' },
-  { skuCode: 'SKU-009', skuName: '真丝连衣裙 夏季款', category: '服装鞋帽', stock: 420, safeStock: 150, stockValue: 294000, turnoverDays: 55, warehouse: '华东仓' },
-  { skuCode: 'SKU-010', skuName: '北欧风格餐桌 1.4米', category: '家居用品', stock: 85, safeStock: 50, stockValue: 425000, turnoverDays: 75, warehouse: '华北仓' }
-])
+const filteredSkuList = computed(() => {
+  const keyword = skuKeyword.value.trim().toLowerCase()
+  if (!keyword) return state.skuList
+  return state.skuList.filter(item =>
+    item.skuCode.toLowerCase().includes(keyword) ||
+    item.skuName.toLowerCase().includes(keyword) ||
+    item.category.toLowerCase().includes(keyword)
+  )
+})
+
+const filteredSkuCount = computed(() => filteredSkuList.value.length)
+
+const pagedSkuList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredSkuList.value.slice(start, end)
+})
 
 const getStockClass = (stock, safeStock) => {
   if (stock < safeStock * 0.5) return 'text-danger'
@@ -487,13 +573,171 @@ const getStockStatus = (stock, safeStock) => {
   return '正常'
 }
 
-const refreshData = () => {
-  // 模拟刷新数据
+const handleSkuSearch = () => {
+  currentPage.value = 1
 }
 
-const drillDown = () => {
-  // 钻取分析
+const handleSkuRowChange = (row) => {
+  selectedSku.value = row
 }
+
+const openDrillDialog = (row) => {
+  const target = row || selectedSku.value
+  if (!target) {
+    ElMessage.warning('请先选择一个SKU')
+    return
+  }
+  selectedSku.value = target
+  drillDialogVisible.value = true
+}
+
+const handleRefresh = () => {
+  ElMessage.success('数据已刷新')
+}
+
+const stockTrendOption = computed(() => {
+  const base = selectedSku.value ? selectedSku.value.stock : 2000
+  const data = []
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    const variation = Math.floor(Math.random() * 400 - 200)
+    data.push({
+      date: `${date.getMonth() + 1}/${date.getDate()}`,
+      value: Math.max(50, base + variation - Math.floor(i * 2))
+    })
+  }
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: '3%', right: '4%', bottom: '10%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: data.map(d => d.date),
+      axisLabel: { fontSize: 10, interval: 4 }
+    },
+    yAxis: { type: 'value' },
+    series: [{
+      type: 'line',
+      smooth: true,
+      data: data.map(d => d.value),
+      itemStyle: { color: '#409eff' },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+            { offset: 1, color: 'rgba(64, 158, 255, 0.02)' }
+          ]
+        }
+      }
+    }]
+  }
+})
+
+const warehouseDistOption = computed(() => {
+  const base = selectedSku.value ? selectedSku.value.stock : 2000
+  const mainWh = selectedSku.value ? selectedSku.value.warehouse : '华东仓'
+  const warehouses = ['华东仓', '华南仓', '华北仓', '西南仓', '西北仓', '东北仓']
+  const data = warehouses.map(wh => ({
+    name: wh,
+    value: wh === mainWh
+      ? base
+      : Math.floor(base * (0.05 + Math.random() * 0.25))
+  }))
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c}件 ({d}%)' },
+    legend: { orient: 'vertical', right: '5%', top: 'center', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 12 } },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '65%'],
+      center: ['35%', '50%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 12, fontWeight: 'bold' }
+      },
+      data: data.map((d, i) => ({
+        ...d,
+        itemStyle: { color: ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399', '#9b59b6'][i] }
+      }))
+    }]
+  }
+})
+
+const priceTrendOption = computed(() => {
+  const base = selectedSku.value
+    ? Math.floor(selectedSku.value.stockValue / selectedSku.value.stock)
+    : 200
+  const data = []
+  for (let i = 89; i >= 0; i--) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    const variation = Math.floor(Math.random() * 30 - 15)
+    data.push({
+      date: `${date.getMonth() + 1}/${date.getDate()}`,
+      value: base + variation
+    })
+  }
+  return {
+    tooltip: { trigger: 'axis', formatter: '{b}<br/>售价: ¥{c}' },
+    grid: { left: '3%', right: '4%', bottom: '10%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: data.map(d => d.date),
+      axisLabel: { fontSize: 10, interval: 14 }
+    },
+    yAxis: { type: 'value', axisLabel: { formatter: '¥{value}' } },
+    series: [{
+      type: 'line',
+      smooth: true,
+      data: data.map(d => d.value),
+      itemStyle: { color: '#67c23a' },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(103, 194, 58, 0.25)' },
+            { offset: 1, color: 'rgba(103, 194, 58, 0.02)' }
+          ]
+        }
+      }
+    }]
+  }
+})
+
+const turnoverOption = computed(() => {
+  const days = selectedSku.value ? selectedSku.value.turnoverDays : 30
+  const categories = ['1-7天', '8-15天', '16-30天', '31-60天', '61-90天', '90天以上']
+  const values = [5, 18, 42, 22, 10, 3]
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c}%' },
+    grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisLabel: { fontSize: 10, rotate: 0 }
+    },
+    yAxis: { type: 'value', axisLabel: { formatter: '{value}%' }, max: 50 },
+    series: [{
+      type: 'bar',
+      data: values.map((v, i) => ({
+        value: v,
+        itemStyle: {
+          color: days <= 15
+            ? '#67c23a'
+            : days <= 30
+              ? '#409eff'
+              : days <= 60
+                ? '#e6a23c'
+                : '#f56c6c'
+        }
+      })),
+      barWidth: 24,
+      label: { show: true, position: 'top', formatter: '{c}%', fontSize: 10 }
+    }]
+  }
+})
 </script>
 
 <style scoped>
@@ -699,5 +943,81 @@ const drillDown = () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.drill-content {
+  padding: 10px 0;
+}
+
+.drill-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 100%);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.sku-info .sku-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 6px;
+}
+
+.sku-info .sku-code {
+  font-size: 13px;
+  color: #909399;
+}
+
+.sku-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.sku-stats .stat-item {
+  text-align: center;
+}
+
+.sku-stats .stat-item .num {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.sku-stats .stat-item .label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.drill-charts {
+  margin-bottom: 16px;
+}
+
+.mini-chart-card {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.mini-chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.mini-chart {
+  width: 100%;
+  height: 200px;
+}
+
+.drill-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
 }
 </style>

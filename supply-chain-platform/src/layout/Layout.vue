@@ -94,8 +94,8 @@
           
           <el-dropdown @command="handleCommand" class="user-dropdown">
             <div class="user-info">
-              <el-avatar size="small" src="https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png" />
-              <span class="username">管理员</span>
+              <el-avatar size="small" :src="state.user.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'" />
+              <span class="username">{{ username || '管理员' }}</span>
               <el-icon><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
@@ -119,22 +119,37 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useStore } from '../store'
 
 const route = useRoute()
 const router = useRouter()
+const { state, actions } = useStore()
 
 const isCollapse = ref(false)
 
 const activeMenu = computed(() => route.path)
 const currentPageTitle = computed(() => route.meta.title || '')
+const username = computed(() => state.user.username)
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-const handleCommand = (command) => {
+const handleCommand = async (command) => {
   if (command === 'logout') {
-    router.push('/login')
+    try {
+      await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+      actions.logout()
+      ElMessage.success('已退出登录')
+      router.replace('/login')
+    } catch {
+      // 用户取消
+    }
   }
 }
 </script>

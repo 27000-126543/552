@@ -6,7 +6,7 @@
         <p class="page-desc">根据竞品价格、供需关系及促销日历，自动生成建议售价</p>
       </div>
       <div class="header-actions">
-        <el-button type="primary" :icon="MagicStick">重新计算</el-button>
+        <el-button type="primary" :icon="MagicStick" @click="recalculate">重新计算</el-button>
         <el-button :icon="Setting">策略配置</el-button>
         <el-button :icon="Calendar">促销日历</el-button>
       </div>
@@ -17,7 +17,7 @@
         <div class="stat-card stat-primary">
           <div class="stat-icon"><el-icon><Goods /></el-icon></div>
           <div class="stat-content">
-            <div class="stat-value">12,586</div>
+            <div class="stat-value">{{ totalCount }}</div>
             <div class="stat-label">在售SKU数</div>
           </div>
         </div>
@@ -26,8 +26,8 @@
         <div class="stat-card stat-success">
           <div class="stat-icon"><el-icon><TrendCharts /></el-icon></div>
           <div class="stat-content">
-            <div class="stat-value">1,258</div>
-            <div class="stat-label">待调价商品</div>
+            <div class="stat-value">{{ pendingCount }}</div>
+            <div class="stat-label">待审批调价</div>
           </div>
         </div>
       </el-col>
@@ -76,16 +76,54 @@
       </el-col>
     </el-row>
 
+    <div class="filter-card mt-20">
+      <el-form :model="filterForm" inline>
+        <el-form-item label="状态">
+          <el-select v-model="filterForm.status" placeholder="全部" clearable style="width: 130px">
+            <el-option label="待审批" value="待审批" />
+            <el-option label="已通过" value="已通过" />
+            <el-option label="已驳回" value="已驳回" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="SKU名称/编码">
+          <el-input v-model="filterForm.keyword" placeholder="请输入" clearable style="width: 180px" />
+        </el-form-item>
+        <el-form-item label="品类">
+          <el-select v-model="filterForm.category" placeholder="全部" clearable style="width: 130px">
+            <el-option label="电子产品" value="电子产品" />
+            <el-option label="食品饮料" value="食品饮料" />
+            <el-option label="服装鞋帽" value="服装鞋帽" />
+            <el-option label="家居用品" value="家居用品" />
+            <el-option label="美妆个护" value="美妆个护" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
     <div class="table-card mt-20">
       <div class="table-header">
         <span class="table-title">建议调价列表</span>
         <div class="table-actions">
-          <el-button size="small" type="primary">批量审批</el-button>
+          <el-button size="small" type="success" :disabled="selectedRows.length === 0" @click="batchApprove(true)">
+            批量通过
+          </el-button>
+          <el-button size="small" type="danger" :disabled="selectedRows.length === 0" @click="batchApprove(false)">
+            批量驳回
+          </el-button>
           <el-button size="small">导出</el-button>
         </div>
       </div>
 
-      <el-table :data="pricingList" style="width: 100%">
+      <el-table
+        ref="tableRef"
+        :data="pagedList"
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
         <el-table-column type="selection" width="50" />
         <el-table-column prop="skuCode" label="SKU编码" width="120" />
         <el-table-column prop="skuName" label="商品名称" min-width="180" />
@@ -95,7 +133,7 @@
             <span class="current-price">¥{{ row.currentPrice }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="suggestedPrice" label="建议售价" width="100">
+        <el-table-column prop="suggestedPrice" label="建议售价" width="140">
           <template #default="{ row }">
             <span class="suggest-price">¥{{ row.suggestedPrice }}</span>
             <el-tag :type="row.priceChange > 0 ? 'danger' : 'success'" size="small" style="margin-left: 4px">
@@ -105,7 +143,7 @@
         </el-table-column>
         <el-table-column prop="cost" label="成本价" width="100" />
         <el-table-column prop="competitorPrice" label="竞品均价" width="100" />
-        <el-table-column prop="supplyDemand" label="供需指数" width="100">
+        <el-table-column prop="supplyDemand" label="供需指数" width="120">
           <template #default="{ row }">
             <el-progress :percentage="row.supplyDemand" :color="getSupplyDemandColor(row.supplyDemand)" :stroke-width="4" />
           </template>
@@ -116,11 +154,15 @@
             <el-tag :type="getStatusType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small">详情</el-button>
-            <el-button v-if="row.status === '待审批'" type="success" link size="small">审批</el-button>
-            <el-button type="info" link size="small">历史</el-button>
+            <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button v-if="row.status === '待审批'" type="success" link size="small" @click="handleApprove(row)">
+              通过
+            </el-button>
+            <el-button v-if="row.status === '待审批'" type="danger" link size="small" @click="handleReject(row)">
+              驳回
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -130,8 +172,9 @@
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50]"
-          :total="1258"
-          layout="total, sizes, prev, pager, next, jumper"
+          :total="filteredCount"
+          layout="total, sizes, prev, pager, next"
+          @size-change="currentPage = 1"
         />
       </div>
     </div>
@@ -179,16 +222,100 @@
         </div>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="detailVisible" title="调价详情" width="560px">
+      <div v-if="currentItem" class="detail-content">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="SKU编码">{{ currentItem.skuCode }}</el-descriptions-item>
+          <el-descriptions-item label="商品名称">{{ currentItem.skuName }}</el-descriptions-item>
+          <el-descriptions-item label="品类">{{ currentItem.category }}</el-descriptions-item>
+          <el-descriptions-item label="当前状态">
+            <el-tag :type="getStatusType(currentItem.status)" size="small">{{ currentItem.status }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="当前售价">¥{{ currentItem.currentPrice }}</el-descriptions-item>
+          <el-descriptions-item label="建议售价">
+            <span style="color: #f56c6c; font-weight: 600">¥{{ currentItem.suggestedPrice }}</span>
+            <el-tag :type="currentItem.priceChange > 0 ? 'danger' : 'success'" size="small" style="margin-left: 6px">
+              {{ currentItem.priceChange > 0 ? '+' : '' }}{{ currentItem.priceChange }}%
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="成本价">¥{{ currentItem.cost }}</el-descriptions-item>
+          <el-descriptions-item label="竞品均价">¥{{ currentItem.competitorPrice }}</el-descriptions-item>
+          <el-descriptions-item label="供需指数" :span="2">
+            <el-progress :percentage="currentItem.supplyDemand" :color="getSupplyDemandColor(currentItem.supplyDemand)" :stroke-width="8" />
+          </el-descriptions-item>
+          <el-descriptions-item label="调价原因" :span="2">{{ currentItem.reason }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="currentItem.status === '待审批'" class="detail-actions">
+          <el-button type="success" @click="handleApprove(currentItem)">通过</el-button>
+          <el-button type="danger" @click="handleReject(currentItem)">驳回</el-button>
+          <el-button @click="detailVisible = false">关闭</el-button>
+        </div>
+        <div v-else class="detail-actions">
+          <el-button type="primary" @click="detailVisible = false">关闭</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { MagicStick, Setting, Calendar, Goods, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
+import { ref, computed, reactive } from 'vue'
+import { MagicStick, Setting, Calendar, Goods, TrendCharts, Wallet, Warning, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { useStore } from '../store'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+const { state, actions } = useStore()
 
 const selectedCategory = ref('all')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const selectedRows = ref([])
+const detailVisible = ref(false)
+const currentItem = ref(null)
+const tableRef = ref(null)
+
+const extraFilter = reactive({
+  keyword: '',
+  category: ''
+})
+
+const filterForm = computed({
+  get: () => ({ status: state.pricings.filter?.status || '', ...extraFilter }),
+  set: (val) => {
+    if (!state.pricings.filter) {
+      state.pricings.filter = { status: '' }
+    }
+    state.pricings.filter.status = val.status
+    extraFilter.keyword = val.keyword
+    extraFilter.category = val.category
+  }
+})
+
+const allPricings = computed(() => state.pricings.all)
+
+const filteredList = computed(() => {
+  return allPricings.value.filter(item => {
+    if (state.pricings.filter?.status && item.status !== state.pricings.filter.status) return false
+    if (extraFilter.keyword) {
+      const kw = extraFilter.keyword.toLowerCase()
+      if (!item.skuCode.toLowerCase().includes(kw) && !item.skuName.toLowerCase().includes(kw)) return false
+    }
+    if (extraFilter.category && item.category !== extraFilter.category) return false
+    return true
+  })
+})
+
+const filteredCount = computed(() => filteredList.value.length)
+const totalCount = computed(() => allPricings.value.length)
+const pendingCount = computed(() => allPricings.value.filter(p => p.status === '待审批').length)
+
+const pagedList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredList.value.slice(start, end)
+})
 
 const priceTrendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -222,17 +349,6 @@ const competitorOption = computed(() => ({
   }]
 }))
 
-const pricingList = ref([
-  { skuCode: 'SKU-001', skuName: '智能手机 128G 黑色', category: '电子产品', currentPrice: 2599, suggestedPrice: 2699, priceChange: 3.8, cost: 1899, competitorPrice: 2799, supplyDemand: 85, reason: '竞品涨价，需求旺盛', status: '待审批' },
-  { skuCode: 'SKU-002', skuName: '无线蓝牙耳机 Pro', category: '电子产品', currentPrice: 399, suggestedPrice: 379, priceChange: -5.0, cost: 210, competitorPrice: 429, supplyDemand: 62, reason: '促销活动期，提升销量', status: '待审批' },
-  { skuCode: 'SKU-003', skuName: '进口牛奶 1L*12', category: '食品饮料', currentPrice: 128, suggestedPrice: 138, priceChange: 7.8, cost: 86, competitorPrice: 132, supplyDemand: 92, reason: '原材料涨价，供需紧张', status: '已通过' },
-  { skuCode: 'SKU-004', skuName: '运动休闲外套', category: '服装鞋帽', currentPrice: 459, suggestedPrice: 399, priceChange: -13.1, cost: 220, competitorPrice: 429, supplyDemand: 45, reason: '换季清仓，库存偏高', status: '待审批' },
-  { skuCode: 'SKU-005', skuName: '智能扫地机器人', category: '家居用品', currentPrice: 1899, suggestedPrice: 1999, priceChange: 5.3, cost: 1299, competitorPrice: 2099, supplyDemand: 78, reason: '新品上市，竞品定价高', status: '已驳回' },
-  { skuCode: 'SKU-006', skuName: '保湿面霜 50ml', category: '美妆个护', currentPrice: 298, suggestedPrice: 308, priceChange: 3.4, cost: 120, competitorPrice: 328, supplyDemand: 88, reason: '竞品涨价，需求稳定', status: '待审批' },
-  { skuCode: 'SKU-007', skuName: '平板电脑 256G', category: '电子产品', currentPrice: 3599, suggestedPrice: 3499, priceChange: -2.8, cost: 2699, competitorPrice: 3699, supplyDemand: 65, reason: '促销活动，冲销量', status: '已通过' },
-  { skuCode: 'SKU-008', skuName: '有机坚果礼盒装', category: '食品饮料', currentPrice: 168, suggestedPrice: 158, priceChange: -6.0, cost: 98, competitorPrice: 178, supplyDemand: 55, reason: '节日后需求回落', status: '待审批' }
-])
-
 const ruleList = ref([
   { id: 1, name: '竞品价格追踪', type: 'active', description: '实时监控竞品价格，自动调整定价策略', weight: 30 },
   { id: 2, name: '供需关系分析', type: 'active', description: '基于供需指数动态调整价格，平衡库存与销售', weight: 25 },
@@ -257,6 +373,97 @@ const getSupplyDemandColor = (value) => {
 const getStatusType = (status) => {
   const map = { '待审批': 'warning', '已通过': 'success', '已驳回': 'danger' }
   return map[status] || 'info'
+}
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows.filter(r => r.status === '待审批')
+}
+
+const handleSearch = () => {
+  currentPage.value = 1
+  ElMessage.success(`搜索完成，找到 ${filteredCount.value} 条结果`)
+}
+
+const handleReset = () => {
+  if (state.pricings.filter) {
+    state.pricings.filter.status = ''
+  }
+  extraFilter.keyword = ''
+  extraFilter.category = ''
+  currentPage.value = 1
+  ElMessage.info('已重置筛选条件')
+}
+
+const viewDetail = (row) => {
+  currentItem.value = { ...row }
+  detailVisible.value = true
+}
+
+const handleApprove = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定要通过 ${row.skuCode} 的调价申请吗？`, '审批确认', {
+      confirmButtonText: '确定通过',
+      cancelButtonText: '取消',
+      type: 'success'
+    })
+    actions.approvePricing(row.skuCode, true)
+    ElMessage.success(`已通过 ${row.skuCode} 的调价申请`)
+    if (detailVisible.value && currentItem.value?.skuCode === row.skuCode) {
+      currentItem.value = { ...state.pricings.all.find(p => p.skuCode === row.skuCode) }
+    }
+    if (tableRef.value) {
+      tableRef.value.clearSelection()
+    }
+  } catch {
+    // 用户取消
+  }
+}
+
+const handleReject = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定要驳回 ${row.skuCode} 的调价申请吗？`, '驳回确认', {
+      confirmButtonText: '确定驳回',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    actions.approvePricing(row.skuCode, false)
+    ElMessage.warning(`已驳回 ${row.skuCode} 的调价申请`)
+    if (detailVisible.value && currentItem.value?.skuCode === row.skuCode) {
+      currentItem.value = { ...state.pricings.all.find(p => p.skuCode === row.skuCode) }
+    }
+    if (tableRef.value) {
+      tableRef.value.clearSelection()
+    }
+  } catch {
+    // 用户取消
+  }
+}
+
+const batchApprove = async (pass) => {
+  if (selectedRows.value.length === 0) return
+  try {
+    const actionText = pass ? '通过' : '驳回'
+    await ElMessageBox.confirm(`确定要批量${actionText}选中的 ${selectedRows.value.length} 条调价申请吗？`, `批量${actionText}确认`, {
+      confirmButtonText: `确定${actionText}`,
+      cancelButtonText: '取消',
+      type: pass ? 'success' : 'warning'
+    })
+    const codes = selectedRows.value.map(r => r.skuCode)
+    actions.approvePricing(codes, pass)
+    ElMessage.success(`已批量${actionText} ${codes.length} 条调价申请`)
+    if (tableRef.value) {
+      tableRef.value.clearSelection()
+    }
+  } catch {
+    // 用户取消
+  }
+}
+
+const recalculate = () => {
+  ElMessage.success('正在重新计算定价策略...')
+  setTimeout(() => {
+    ElMessage.success('定价策略重新计算完成')
+  }, 1000)
 }
 </script>
 
@@ -350,6 +557,13 @@ const getStatusType = (status) => {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+
+.filter-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
 }
 
 .table-card {
@@ -503,5 +717,18 @@ const getStatusType = (status) => {
 .promo-range {
   font-size: 12px;
   color: #909399;
+}
+
+.detail-content {
+  padding: 10px 0;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
 }
 </style>

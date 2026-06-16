@@ -16,7 +16,7 @@
         <div class="stat-card stat-danger">
           <div class="stat-icon"><el-icon><Warning /></el-icon></div>
           <div class="stat-content">
-            <div class="stat-value">5</div>
+            <div class="stat-value">{{ pendingCount }}</div>
             <div class="stat-label">待处理预警</div>
           </div>
         </div>
@@ -25,8 +25,8 @@
         <div class="stat-card stat-warning">
           <div class="stat-icon"><el-icon><Clock /></el-icon></div>
           <div class="stat-content">
-            <div class="stat-value">28</div>
-            <div class="stat-label">本月预警</div>
+            <div class="stat-value">{{ processingCount }}</div>
+            <div class="stat-label">处理中</div>
           </div>
         </div>
       </el-col>
@@ -34,7 +34,7 @@
         <div class="stat-card stat-primary">
           <div class="stat-icon"><el-icon><CircleCheck /></el-icon></div>
           <div class="stat-content">
-            <div class="stat-value">156</div>
+            <div class="stat-value">{{ resolvedCount }}</div>
             <div class="stat-label">已处理</div>
           </div>
         </div>
@@ -44,7 +44,7 @@
           <div class="stat-icon"><el-icon><Shield /></el-icon></div>
           <div class="stat-content">
             <div class="stat-value">98.5%</div>
-            <div class="stat-label">准确率</div>
+            <div class="stat-label">预警准确率</div>
           </div>
         </div>
       </el-col>
@@ -62,7 +62,7 @@
       <el-col :span="8">
         <div class="chart-card">
           <div class="chart-header">
-            <span class="chart-title">预警趋势</span>
+            <span class="chart-title">近7天预警趋势</span>
           </div>
           <v-chart :option="trendOption" autoresize class="chart-container" />
         </div>
@@ -70,7 +70,7 @@
       <el-col :span="8">
         <div class="chart-card">
           <div class="chart-header">
-            <span class="chart-title">处理时效</span>
+            <span class="chart-title">处理时效分布</span>
           </div>
           <v-chart :option="efficiencyOption" autoresize class="chart-container" />
         </div>
@@ -80,30 +80,32 @@
     <div class="filter-card mt-20">
       <el-form :model="filterForm" inline>
         <el-form-item label="预警类型">
-          <el-select v-model="filterForm.type" placeholder="全部" clearable style="width: 160px">
-            <el-option label="超低价交易" value="lowPrice" />
-            <el-option label="重复订单" value="duplicate" />
-            <el-option label="异常退货" value="abnormalReturn" />
-            <el-option label="异常账号" value="abnormalAccount" />
+          <el-select v-model="filterForm.type" placeholder="全部" clearable style="width: 140px">
+            <el-option label="超低价交易" value="超低价交易" />
+            <el-option label="重复订单" value="重复订单" />
+            <el-option label="异常退货" value="异常退货" />
+            <el-option label="异常账号" value="异常账号" />
           </el-select>
         </el-form-item>
-        <el-form-item label="预警等级">
-          <el-select v-model="filterForm.level" placeholder="全部" clearable style="width: 140px">
-            <el-option label="高危" value="high" />
-            <el-option label="中危" value="medium" />
-            <el-option label="低危" value="low" />
+        <el-form-item label="风险等级">
+          <el-select v-model="filterForm.level" placeholder="全部" clearable style="width: 120px">
+            <el-option label="高危" value="高危" />
+            <el-option label="中危" value="中危" />
+            <el-option label="低危" value="低危" />
           </el-select>
         </el-form-item>
-        <el-form-item label="处理状态">
-          <el-select v-model="filterForm.status" placeholder="全部" clearable style="width: 140px">
-            <el-option label="待处理" value="pending" />
-            <el-option label="处理中" value="processing" />
-            <el-option label="已处理" value="resolved" />
+        <el-form-item label="预警编号">
+          <el-input v-model="filterForm.keyword" placeholder="请输入编号" clearable style="width: 160px" />
+        </el-form-item>
+        <el-form-item label="是否冻结">
+          <el-select v-model="filterForm.frozen" placeholder="全部" clearable style="width: 120px">
+            <el-option label="已冻结" value="true" />
+            <el-option label="未冻结" value="false" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search">搜索</el-button>
-          <el-button :icon="RefreshLeft">重置</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -112,7 +114,7 @@
       <div class="table-header">
         <span class="table-title">预警列表</span>
         <div class="table-actions">
-          <el-radio-group v-model="activeTab" size="small">
+          <el-radio-group v-model="activeTab" size="small" @change="handleTabChange">
             <el-radio-button label="pending">待处理</el-radio-button>
             <el-radio-button label="processing">处理中</el-radio-button>
             <el-radio-button label="resolved">已处理</el-radio-button>
@@ -120,7 +122,7 @@
         </div>
       </div>
 
-      <el-table :data="warningList" style="width: 100%">
+      <el-table :data="pagedList" style="width: 100%" v-loading="loading">
         <el-table-column prop="warningNo" label="预警编号" width="140" />
         <el-table-column prop="type" label="预警类型" width="120">
           <template #default="{ row }">
@@ -132,25 +134,38 @@
             <el-tag :type="getLevelType(row.level)" effect="dark" size="small">{{ row.level }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="预警描述" min-width="250" />
+        <el-table-column prop="description" label="预警描述" min-width="220" />
         <el-table-column prop="relatedOrder" label="关联订单" width="140" />
-        <el-table-column prop="amount" label="涉及金额" width="120">
+        <el-table-column prop="amount" label="涉及金额" width="110">
           <template #default="{ row }">
             ¥{{ row.amount.toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column prop="detectTime" label="检测时间" width="160" />
+        <el-table-column prop="frozen" label="冻结状态" width="90">
+          <template #default="{ row }">
+            <el-tag v-if="row.frozen" type="danger" size="small">已冻结</el-tag>
+            <el-tag v-else type="info" size="small">未冻结</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="workOrder" label="工单号" width="140">
+          <template #default="{ row }">
+            <span v-if="row.workOrder" class="text-primary">{{ row.workOrder }}</span>
+            <span v-else class="text-info">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="handler" label="处理人" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="detectTime" label="检测时间" width="160" />
+        <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small">详情</el-button>
-            <el-button v-if="row.status === '待处理'" type="success" link size="small">处理</el-button>
-            <el-button type="info" link size="small">派单</el-button>
+            <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
+            <el-button v-if="row.status === '待处理'" type="success" link size="small" @click="handleProcess(row)">处理</el-button>
+            <el-button v-if="row.status === '待处理' || row.status === '处理中'" type="warning" link size="small" @click="handleDispatch(row)">派单</el-button>
+            <el-button v-if="row.status === '处理中'" type="primary" link size="small" @click="handleResolve(row)">结案</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -160,60 +175,113 @@
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50]"
-          :total="28"
+          :total="filteredCount"
           layout="total, sizes, prev, pager, next"
+          @size-change="currentPage = 1"
         />
       </div>
     </div>
 
-    <div class="rules-card mt-20">
-      <div class="card-header">
-        <span class="card-title">预警规则引擎</span>
-        <el-button type="primary" size="small" :icon="Plus">新增规则</el-button>
+    <el-empty v-if="filteredCount === 0 && !loading" :description="`暂无${tabText}的预警`" style="padding: 60px 0" />
+
+    <el-dialog v-model="detailVisible" title="预警详情" width="680px">
+      <div v-if="currentWarning" class="detail-content">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="预警编号">{{ currentWarning.warningNo }}</el-descriptions-item>
+          <el-descriptions-item label="预警类型">
+            <el-tag :type="getWarningType(currentWarning.type)" size="small">{{ currentWarning.type }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="风险等级">
+            <el-tag :type="getLevelType(currentWarning.level)" effect="dark" size="small">{{ currentWarning.level }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="当前状态">
+            <el-tag :type="getStatusType(currentWarning.status)" size="small">{{ currentWarning.status }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="关联订单" :span="2">{{ currentWarning.relatedOrder }}</el-descriptions-item>
+          <el-descriptions-item label="涉及金额">¥{{ currentWarning.amount.toLocaleString() }}</el-descriptions-item>
+          <el-descriptions-item label="检测时间">{{ currentWarning.detectTime }}</el-descriptions-item>
+          <el-descriptions-item label="处理人">{{ currentWarning.handler === '-' ? '暂无' : currentWarning.handler }}</el-descriptions-item>
+          <el-descriptions-item label="工单编号">{{ currentWarning.workOrder || '暂无' }}</el-descriptions-item>
+          <el-descriptions-item label="冻结状态">
+            <el-tag v-if="currentWarning.frozen" type="danger" size="small">已冻结</el-tag>
+            <el-tag v-else type="info" size="small">未冻结</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="预警描述" :span="2">{{ currentWarning.description }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="detail-actions">
+          <el-button v-if="currentWarning.status === '待处理'" type="success" @click="handleProcess(currentWarning)">立即处理</el-button>
+          <el-button v-if="currentWarning.status !== '已处理'" type="warning" @click="handleDispatch(currentWarning)">派发工单</el-button>
+          <el-button v-if="currentWarning.status === '处理中'" type="primary" @click="handleResolve(currentWarning)">结案处理</el-button>
+          <el-button @click="detailVisible = false">关闭</el-button>
+        </div>
       </div>
-      <el-table :data="ruleList" style="width: 100%">
-        <el-table-column prop="ruleName" label="规则名称" width="200" />
-        <el-table-column prop="ruleType" label="规则类型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getRuleType(row.ruleType)" size="small">{{ row.ruleType }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="condition" label="触发条件" min-width="280" />
-        <el-table-column prop="action" label="执行动作" width="150" />
-        <el-table-column prop="triggerCount" label="触发次数" width="100" sortable />
-        <el-table-column prop="accuracy" label="准确率" width="100">
-          <template #default="{ row }">
-            {{ row.accuracy }}%
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
-          <template #default="{ row }">
-            <el-switch v-model="row.enabled" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default>
-            <el-button type="primary" link size="small">编辑</el-button>
-            <el-button type="danger" link size="small">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { Bell, List, Warning, Clock, CircleCheck, Shield, Search, RefreshLeft, Plus } from '@element-plus/icons-vue'
+import { ref, computed, reactive } from 'vue'
+import { Bell, List, Warning, Clock, CircleCheck, Shield, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { useStore } from '../store'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-const activeTab = ref('pending')
+const { state, actions } = useStore()
+
 const currentPage = ref(1)
 const pageSize = ref(10)
+const loading = ref(false)
+const detailVisible = ref(false)
+const currentWarning = ref(null)
 
-const filterForm = ref({
-  type: '',
-  level: '',
-  status: ''
+const extraFilter = reactive({
+  keyword: '',
+  frozen: ''
+})
+
+const filterForm = computed({
+  get: () => ({ ...state.warnings.filter, ...extraFilter }),
+  set: (val) => {
+    state.warnings.filter.type = val.type
+    state.warnings.filter.level = val.level
+    state.warnings.filter.status = val.status
+    extraFilter.keyword = val.keyword
+    extraFilter.frozen = val.frozen
+  }
+})
+
+const activeTab = computed({
+  get: () => state.warnings.activeTab,
+  set: (val) => { state.warnings.activeTab = val }
+})
+
+const tabText = computed(() => {
+  const map = { pending: '待处理', processing: '处理中', resolved: '已处理' }
+  return map[activeTab.value] || ''
+})
+
+const filteredList = computed(() => {
+  const list = state.getters.filteredWarnings.value
+  return list.filter(item => {
+    if (extraFilter.keyword && !item.warningNo.toLowerCase().includes(extraFilter.keyword.toLowerCase()) &&
+        !item.description.includes(extraFilter.keyword)) return false
+    if (extraFilter.frozen !== '' && extraFilter.frozen !== undefined) {
+      const isFrozen = extraFilter.frozen === 'true' || extraFilter.frozen === true
+      if (item.frozen !== isFrozen) return false
+    }
+    return true
+  })
+})
+
+const filteredCount = computed(() => filteredList.value.length)
+const pendingCount = computed(() => state.warnings.all.filter(w => w.status === '待处理').length)
+const processingCount = computed(() => state.warnings.all.filter(w => w.status === '处理中').length)
+const resolvedCount = computed(() => state.warnings.all.filter(w => w.status === '已处理').length)
+
+const pagedList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredList.value.slice(start, end)
 })
 
 const typeOption = computed(() => ({
@@ -226,9 +294,9 @@ const typeOption = computed(() => ({
     itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
     label: { formatter: '{b}\n{d}%' },
     data: [
-      { value: 12, name: '超低价交易', itemStyle: { color: '#f56c6c' } },
-      { value: 8, name: '重复订单', itemStyle: { color: '#e6a23c' } },
-      { value: 5, name: '异常退货', itemStyle: { color: '#9b59b6' } },
+      { value: pendingCount.value > 0 ? 12 : 0, name: '超低价交易', itemStyle: { color: '#f56c6c' } },
+      { value: processingCount.value > 0 ? 8 : 0, name: '重复订单', itemStyle: { color: '#e6a23c' } },
+      { value: resolvedCount.value > 0 ? 5 : 0, name: '异常退货', itemStyle: { color: '#9b59b6' } },
       { value: 3, name: '异常账号', itemStyle: { color: '#409eff' } }
     ]
   }]
@@ -275,24 +343,73 @@ const efficiencyOption = computed(() => ({
   }]
 }))
 
-const warningList = ref([
-  { warningNo: 'WARN-202606001', type: '超低价交易', level: '高危', description: '订单价格低于成本价30%，疑似异常定价', relatedOrder: 'PO-202606125', amount: 52800, detectTime: '2026-06-16 10:25:30', handler: '-', status: '待处理' },
-  { warningNo: 'WARN-202606002', type: '重复订单', level: '中危', description: '同一供应商30分钟内重复提交相同SKU订单', relatedOrder: 'PO-202606128', amount: 18900, detectTime: '2026-06-16 09:15:20', handler: '张主管', status: '处理中' },
-  { warningNo: 'WARN-202606003', type: '异常退货', level: '高危', description: '某账号近7天退货率达85%，疑似恶意退货', relatedOrder: 'RT-202606045', amount: 25600, detectTime: '2026-06-16 08:45:10', handler: '-', status: '待处理' },
-  { warningNo: 'WARN-202606004', type: '异常账号', level: '中危', description: '新注册账号下单金额突增，存在风险', relatedOrder: 'PO-202606130', amount: 128000, detectTime: '2026-06-15 18:30:00', handler: '李经理', status: '处理中' },
-  { warningNo: 'WARN-202606005', type: '超低价交易', level: '低危', description: '价格略低于市场均价5%，需关注', relatedOrder: 'PO-202606120', amount: 8500, detectTime: '2026-06-15 16:20:45', handler: '-', status: '待处理' },
-  { warningNo: 'WARN-202606006', type: '重复订单', level: '低危', description: '相似订单间隔较短，人工确认', relatedOrder: 'PO-202606118', amount: 6200, detectTime: '2026-06-15 14:10:30', handler: '王主管', status: '已处理' },
-  { warningNo: 'WARN-202606007', type: '异常退货', level: '中危', description: '单批次退货数量异常偏高', relatedOrder: 'RT-202606042', amount: 15800, detectTime: '2026-06-15 11:05:20', handler: '赵经理', status: '已处理' },
-  { warningNo: 'WARN-202606008', type: '超低价交易', level: '高危', description: '批量采购价远低于正常市场价', relatedOrder: 'PO-202606112', amount: 256000, detectTime: '2026-06-14 20:15:00', handler: '李总监', status: '已处理' }
-])
+const handleTabChange = () => {
+  currentPage.value = 1
+}
 
-const ruleList = ref([
-  { ruleName: '超低价检测规则', ruleType: '价格规则', condition: '订单价格 < 成本价 * 0.8', action: '自动冻结 + 派单', triggerCount: 45, accuracy: 95.2, enabled: true },
-  { ruleName: '重复订单检测', ruleType: '行为规则', condition: '同一供应商30分钟内相同SKU订单 > 2', action: '标记预警 + 审核', triggerCount: 28, accuracy: 88.6, enabled: true },
-  { ruleName: '异常退货检测', ruleType: '行为规则', condition: '账号7天退货率 > 50%', action: '自动冻结 + 人工审核', triggerCount: 18, accuracy: 92.3, enabled: true },
-  { ruleName: '新账号突增检测', ruleType: '账号规则', condition: '新账号首单金额 > 10万', action: '人工审核', triggerCount: 12, accuracy: 78.5, enabled: true },
-  { ruleName: '夜间异常交易', ruleType: '时间规则', condition: '凌晨2-6点大额交易', action: '标记预警', triggerCount: 8, accuracy: 65.2, enabled: false }
-])
+const handleSearch = () => {
+  loading.value = true
+  setTimeout(() => {
+    currentPage.value = 1
+    loading.value = false
+    ElMessage.success(`搜索完成，找到 ${filteredCount.value} 条结果`)
+  }, 300)
+}
+
+const handleReset = () => {
+  actions.resetWarningFilter()
+  extraFilter.keyword = ''
+  extraFilter.frozen = ''
+  currentPage.value = 1
+  ElMessage.info('已重置筛选条件')
+}
+
+const handleView = (row) => {
+  currentWarning.value = { ...row }
+  detailVisible.value = true
+}
+
+const handleProcess = (row) => {
+  actions.handleWarning(row.warningNo, state.user.username || '管理员')
+  ElMessage.success(`已开始处理预警 ${row.warningNo}`)
+  if (currentWarning.value && currentWarning.value.warningNo === row.warningNo) {
+    currentWarning.value = { ...state.warnings.all.find(w => w.warningNo === row.warningNo) }
+  }
+}
+
+const handleDispatch = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定要为预警 ${row.warningNo} 派发工单吗？派发后将自动冻结相关交易。`, '派发工单确认', {
+      confirmButtonText: '确定派发',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    actions.dispatchWarning(row.warningNo)
+    ElMessage.success(`工单已派发，相关交易已冻结`)
+    if (currentWarning.value && currentWarning.value.warningNo === row.warningNo) {
+      currentWarning.value = { ...state.warnings.all.find(w => w.warningNo === row.warningNo) }
+    }
+  } catch {
+    // 用户取消
+  }
+}
+
+const handleResolve = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定要将预警 ${row.warningNo} 结案吗？`, '结案确认', {
+      confirmButtonText: '确定结案',
+      cancelButtonText: '取消',
+      type: 'success'
+    })
+    actions.resolveWarning(row.warningNo)
+    ElMessage.success(`预警 ${row.warningNo} 已结案`)
+    if (currentWarning.value && currentWarning.value.warningNo === row.warningNo) {
+      currentWarning.value = { ...state.warnings.all.find(w => w.warningNo === row.warningNo) }
+    }
+  } catch {
+    // 用户取消
+  }
+}
 
 const getWarningType = (type) => {
   const map = { '超低价交易': 'danger', '重复订单': 'warning', '异常退货': 'info', '异常账号': 'primary' }
@@ -307,11 +424,6 @@ const getLevelType = (level) => {
 const getStatusType = (status) => {
   const map = { '待处理': 'warning', '处理中': 'primary', '已处理': 'success' }
   return map[status] || 'info'
-}
-
-const getRuleType = (type) => {
-  const map = { '价格规则': 'danger', '行为规则': 'warning', '账号规则': 'primary', '时间规则': 'info' }
-  return map[type] || 'info'
 }
 </script>
 
@@ -406,7 +518,7 @@ const getRuleType = (type) => {
 
 .chart-container {
   width: 100%;
-  height: 240px;
+  height: 220px;
 }
 
 .filter-card {
@@ -416,7 +528,7 @@ const getRuleType = (type) => {
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
 }
 
-.table-card, .rules-card {
+.table-card {
   background: #fff;
   border-radius: 8px;
   padding: 20px;
@@ -442,6 +554,15 @@ const getRuleType = (type) => {
   align-items: center;
 }
 
+.text-primary {
+  color: #409eff;
+  cursor: pointer;
+}
+
+.text-info {
+  color: #909399;
+}
+
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
@@ -450,5 +571,18 @@ const getRuleType = (type) => {
 
 .mt-20 {
   margin-top: 20px;
+}
+
+.detail-content {
+  padding: 10px 0;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
 }
 </style>

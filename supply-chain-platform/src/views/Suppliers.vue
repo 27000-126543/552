@@ -15,7 +15,7 @@
     <div class="filter-card">
       <el-form :model="filterForm" inline>
         <el-form-item label="供应商名称">
-          <el-input v-model="filterForm.name" placeholder="请输入" clearable style="width: 180px" />
+          <el-input v-model="filterForm.name" placeholder="请输入名称" clearable style="width: 200px" />
         </el-form-item>
         <el-form-item label="供应商等级">
           <el-select v-model="filterForm.level" placeholder="全部" clearable style="width: 140px">
@@ -27,23 +27,24 @@
         </el-form-item>
         <el-form-item label="接入方式">
           <el-select v-model="filterForm.accessType" placeholder="全部" clearable style="width: 140px">
-            <el-option label="API" value="api" />
-            <el-option label="EDI" value="edi" />
-            <el-option label="邮件" value="email" />
-            <el-option label="手工录入" value="manual" />
+            <el-option label="API" value="API" />
+            <el-option label="EDI" value="EDI" />
+            <el-option label="邮件" value="邮件" />
+            <el-option label="手工录入" value="手工录入" />
           </el-select>
         </el-form-item>
         <el-form-item label="品类">
           <el-select v-model="filterForm.category" placeholder="全部" clearable style="width: 140px">
-            <el-option label="电子产品" value="electronics" />
-            <el-option label="食品饮料" value="food" />
-            <el-option label="服装鞋帽" value="clothing" />
-            <el-option label="家居用品" value="home" />
+            <el-option label="电子产品" value="电子产品" />
+            <el-option label="食品饮料" value="食品饮料" />
+            <el-option label="服装鞋帽" value="服装鞋帽" />
+            <el-option label="家居用品" value="家居用品" />
+            <el-option label="美妆个护" value="美妆个护" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search">搜索</el-button>
-          <el-button :icon="RefreshLeft">重置</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -52,29 +53,29 @@
       <el-col :span="6">
         <div class="stat-item">
           <div class="stat-label">供应商总数</div>
-          <div class="stat-value">1,256</div>
+          <div class="stat-value">{{ totalCount }}</div>
           <div class="stat-sub">较上月 +5.2%</div>
         </div>
       </el-col>
       <el-col :span="6">
         <div class="stat-item">
           <div class="stat-label">活跃供应商</div>
-          <div class="stat-value">862</div>
-          <div class="stat-sub">占比 68.6%</div>
+          <div class="stat-value">{{ activeCount }}</div>
+          <div class="stat-sub">占比 {{ activePercent }}%</div>
         </div>
       </el-col>
       <el-col :span="6">
         <div class="stat-item">
           <div class="stat-label">A级供应商</div>
-          <div class="stat-value">158</div>
-          <div class="stat-sub">占比 12.6%</div>
+          <div class="stat-value">{{ levelACount }}</div>
+          <div class="stat-sub">占比 {{ levelAPercent }}%</div>
         </div>
       </el-col>
       <el-col :span="6">
         <div class="stat-item">
-          <div class="stat-label">待审核</div>
-          <div class="stat-value">28</div>
-          <div class="stat-sub">需处理</div>
+          <div class="stat-label">当前筛选结果</div>
+          <div class="stat-value text-primary">{{ filteredCount }}</div>
+          <div class="stat-sub">条记录</div>
         </div>
       </el-col>
     </el-row>
@@ -90,10 +91,10 @@
         </div>
       </div>
       
-      <el-table :data="supplierList" style="width: 100%">
+      <el-table :data="pagedList" style="width: 100%" v-loading="loading">
         <el-table-column type="selection" width="50" />
         <el-table-column prop="code" label="供应商编码" width="120" />
-        <el-table-column prop="name" label="供应商名称" min-width="200">
+        <el-table-column prop="name" label="供应商名称" min-width="220">
           <template #default="{ row }">
             <div class="supplier-name-cell">
               <el-avatar size="small" :style="{ backgroundColor: getAvatarColor(row.name) }">
@@ -116,10 +117,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="score" label="综合评分" width="120" sortable>
+        <el-table-column prop="score" label="综合评分" width="130" sortable>
           <template #default="{ row }">
             <div class="score-cell">
-              <el-progress :percentage="row.score" :color="getScoreColor(row.score)" :stroke-width="6" />
+              <el-progress :percentage="row.score" :color="getScoreColor(row.score)" :stroke-width="6" style="flex: 1" />
               <span class="score-text">{{ row.score }}</span>
             </div>
           </template>
@@ -151,41 +152,63 @@
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50, 100]"
-          :total="1256"
+          :total="filteredCount"
           layout="total, sizes, prev, pager, next, jumper"
+          @size-change="currentPage = 1"
         />
       </div>
     </div>
+
+    <el-empty v-if="filteredCount === 0 && !loading" description="没有找到匹配的供应商" style="padding: 60px 0" />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Plus, Upload, Connection, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { useStore } from '../store'
+import { ElMessage } from 'element-plus'
+
+const { state, actions } = useStore()
 
 const viewType = ref('table')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const loading = ref(false)
 
-const filterForm = ref({
-  name: '',
-  level: '',
-  accessType: '',
-  category: ''
+const filterForm = computed({
+  get: () => state.suppliers.filter,
+  set: (val) => { state.suppliers.filter = val }
 })
 
-const supplierList = ref([
-  { code: 'SUP-001', name: '深圳科创电子有限公司', level: 'A', category: '电子产品', accessType: 'API', score: 92, deliveryRate: 98.5, cooperationTime: '5年', status: 'active' },
-  { code: 'SUP-002', name: '广州优品贸易有限公司', level: 'A', category: '食品饮料', accessType: 'EDI', score: 88, deliveryRate: 96.2, cooperationTime: '3年', status: 'active' },
-  { code: 'SUP-003', name: '杭州时尚服饰有限公司', level: 'B', category: '服装鞋帽', accessType: 'API', score: 78, deliveryRate: 92.8, cooperationTime: '2年', status: 'active' },
-  { code: 'SUP-004', name: '北京家居优品公司', level: 'B', category: '家居用品', accessType: '邮件', score: 75, deliveryRate: 90.5, cooperationTime: '4年', status: 'active' },
-  { code: 'SUP-005', name: '上海美妆科技公司', level: 'A', category: '美妆个护', accessType: 'API', score: 90, deliveryRate: 97.8, cooperationTime: '6年', status: 'active' },
-  { code: 'SUP-006', name: '江苏食品集团', level: 'B', category: '食品饮料', accessType: 'EDI', score: 82, deliveryRate: 94.3, cooperationTime: '3年', status: 'active' },
-  { code: 'SUP-007', name: '东莞数码配件厂', level: 'C', category: '电子产品', accessType: '手工录入', score: 68, deliveryRate: 85.6, cooperationTime: '1年', status: 'active' },
-  { code: 'SUP-008', name: '宁波服装织造厂', level: 'C', category: '服装鞋帽', accessType: '邮件', score: 65, deliveryRate: 82.9, cooperationTime: '2年', status: 'inactive' },
-  { code: 'SUP-009', name: '成都家居用品公司', level: 'B', category: '家居用品', accessType: 'API', score: 80, deliveryRate: 93.1, cooperationTime: '3年', status: 'active' },
-  { code: 'SUP-010', name: '武汉食品加工有限公司', level: 'B', category: '食品饮料', accessType: 'EDI', score: 76, deliveryRate: 91.7, cooperationTime: '2年', status: 'active' }
-])
+const filteredList = computed(() => state.getters.filteredSuppliers.value)
+const filteredCount = computed(() => filteredList.value.length)
+const totalCount = computed(() => state.suppliers.all.length)
+const activeCount = computed(() => state.suppliers.all.filter(s => s.status === 'active').length)
+const activePercent = computed(() => totalCount.value ? Math.round(activeCount.value / totalCount.value * 100) : 0)
+const levelACount = computed(() => state.suppliers.all.filter(s => s.level === 'A').length)
+const levelAPercent = computed(() => totalCount.value ? Math.round(levelACount.value / totalCount.value * 100) : 0)
+
+const pagedList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredList.value.slice(start, end)
+})
+
+const handleSearch = () => {
+  loading.value = true
+  setTimeout(() => {
+    currentPage.value = 1
+    loading.value = false
+    ElMessage.success(`搜索完成，找到 ${filteredCount.value} 条结果`)
+  }, 300)
+}
+
+const handleReset = () => {
+  actions.resetSupplierFilter()
+  currentPage.value = 1
+  ElMessage.info('已重置筛选条件')
+}
 
 const getLevelType = (level) => {
   const map = { A: 'success', B: 'warning', C: 'info', D: 'danger' }
@@ -273,6 +296,10 @@ const getAvatarColor = (name) => {
   margin-bottom: 4px;
 }
 
+.stat-value.text-primary {
+  color: #409eff;
+}
+
 .stat-sub {
   font-size: 12px;
   color: #67c23a;
@@ -316,14 +343,11 @@ const getAvatarColor = (name) => {
   gap: 8px;
 }
 
-.score-cell .el-progress {
-  flex: 1;
-}
-
 .score-text {
   font-size: 12px;
   color: #606266;
   width: 30px;
+  flex-shrink: 0;
 }
 
 .text-success {
