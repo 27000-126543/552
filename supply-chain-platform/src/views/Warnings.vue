@@ -115,6 +115,7 @@
         <span class="table-title">预警列表</span>
         <div class="table-actions">
           <el-radio-group v-model="activeTab" size="small" @change="handleTabChange">
+            <el-radio-button label="all">全部预警</el-radio-button>
             <el-radio-button label="pending">待处理</el-radio-button>
             <el-radio-button label="processing">处理中</el-radio-button>
             <el-radio-button label="resolved">已处理</el-radio-button>
@@ -245,7 +246,7 @@ const activeTab = computed({
 })
 
 const tabText = computed(() => {
-  const map = { pending: '待处理', processing: '处理中', resolved: '已处理' }
+  const map = { all: '全部', pending: '待处理', processing: '处理中', resolved: '已处理' }
   return map[activeTab.value] || ''
 })
 

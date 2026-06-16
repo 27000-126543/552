@@ -139,10 +139,12 @@
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
-          <template #default>
-            <el-button type="primary" link size="small">详情</el-button>
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="primary" link size="small">编辑</el-button>
-            <el-button type="danger" link size="small">停用</el-button>
+            <el-button :type="row.status === 'active' ? 'danger' : 'success'" link size="small" @click="toggleStatus(row)">
+              {{ row.status === 'active' ? '停用' : '恢复' }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -160,14 +162,127 @@
     </div>
 
     <el-empty v-if="filteredCount === 0 && !loading" description="没有找到匹配的供应商" style="padding: 60px 0" />
+
+    <el-drawer v-model="detailVisible" title="供应商详情" size="500px">
+      <div v-if="currentSupplier" class="supplier-detail">
+        <div class="detail-header">
+          <el-avatar size="64" :style="{ backgroundColor: getAvatarColor(currentSupplier.name) }">
+            {{ currentSupplier.name.charAt(0) }}
+          </el-avatar>
+          <div class="header-info">
+            <h3 class="supplier-name">{{ currentSupplier.name }}</h3>
+            <div class="supplier-meta">
+              <el-tag :type="getLevelType(currentSupplier.level)" size="small">{{ currentSupplier.level }}级供应商</el-tag>
+              <el-tag :type="currentSupplier.status === 'active' ? 'success' : 'info'" size="small" style="margin-left: 8px">
+                {{ currentSupplier.status === 'active' ? '活跃' : '停用' }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+
+        <el-divider />
+
+        <div class="detail-section">
+          <h4 class="section-title">基础信息</h4>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="供应商编码">{{ currentSupplier.code }}</el-descriptions-item>
+            <el-descriptions-item label="主营品类">{{ currentSupplier.category }}</el-descriptions-item>
+            <el-descriptions-item label="合作年限">{{ currentSupplier.cooperationTime }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">接入信息</h4>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="接入方式">
+              <el-tag :type="getAccessType(currentSupplier.accessType)" effect="plain" size="small">
+                {{ currentSupplier.accessType }}
+              </el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">绩效评分</h4>
+          <div class="score-section">
+            <div class="score-item">
+              <div class="score-label">综合评分</div>
+              <div class="score-main">
+                <el-progress :percentage="currentSupplier.score" :color="getScoreColor(currentSupplier.score)" :stroke-width="10" />
+                <span class="score-num">{{ currentSupplier.score }}</span>
+              </div>
+            </div>
+            <div class="score-item">
+              <div class="score-label">准时交付率</div>
+              <div class="score-main">
+                <el-progress :percentage="currentSupplier.deliveryRate" :color="getScoreColor(currentSupplier.deliveryRate)" :stroke-width="10" />
+                <span class="score-num text-success">{{ currentSupplier.deliveryRate }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">历史合作摘要</h4>
+          <div class="history-summary">
+            <div class="history-item">
+              <div class="history-icon" style="background: #ecf5ff; color: #409eff">
+                <el-icon><Document /></el-icon>
+              </div>
+              <div class="history-content">
+                <div class="history-title">累计订单</div>
+                <div class="history-value">{{ Math.floor(Math.random() * 200) + 50 }} 笔</div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-icon" style="background: #f0f9eb; color: #67c23a">
+                <el-icon><Wallet /></el-icon>
+              </div>
+              <div class="history-content">
+                <div class="history-title">累计交易金额</div>
+                <div class="history-value">¥{{ (Math.floor(Math.random() * 5000) + 500).toLocaleString() }} 万</div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-icon" style="background: #fdf6ec; color: #e6a23c">
+                <el-icon><Warning /></el-icon>
+              </div>
+              <div class="history-content">
+                <div class="history-title">异常记录</div>
+                <div class="history-value">{{ Math.floor(Math.random() * 5) }} 次</div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-icon" style="background: #f3e8ff; color: #9b59b6">
+                <el-icon><CircleCheck /></el-icon>
+              </div>
+              <div class="history-content">
+                <div class="history-title">好评率</div>
+                <div class="history-value">{{ Math.floor(Math.random() * 10) + 90 }}%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 12px">
+          <el-button @click="detailVisible = false">关闭</el-button>
+          <el-button type="primary">编辑信息</el-button>
+          <el-button v-if="currentSupplier" :type="currentSupplier.status === 'active' ? 'danger' : 'success'" @click="toggleStatus(currentSupplier)">
+            {{ currentSupplier.status === 'active' ? '停用供应商' : '恢复供应商' }}
+          </el-button>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Plus, Upload, Connection, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { Plus, Upload, Connection, Search, RefreshLeft, Document, Wallet, Warning, CircleCheck } from '@element-plus/icons-vue'
 import { useStore } from '../store'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { state, getters, actions } = useStore()
 
@@ -175,6 +290,8 @@ const viewType = ref('table')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const loading = ref(false)
+const detailVisible = ref(false)
+const currentSupplier = ref(null)
 
 const filterForm = computed({
   get: () => state.suppliers.filter,
@@ -208,6 +325,27 @@ const handleReset = () => {
   actions.resetSupplierFilter()
   currentPage.value = 1
   ElMessage.info('已重置筛选条件')
+}
+
+const openDetail = (row) => {
+  currentSupplier.value = { ...row }
+  detailVisible.value = true
+}
+
+const toggleStatus = async (row) => {
+  const action = row.status === 'active' ? '停用' : '恢复启用'
+  try {
+    await ElMessageBox.confirm(`确认要${action}供应商「${row.name}」吗？`, '操作确认', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    actions.toggleSupplierStatus(row.code)
+    if (currentSupplier.value && currentSupplier.value.code === row.code) {
+      currentSupplier.value.status = row.status === 'active' ? 'inactive' : 'active'
+    }
+    ElMessage.success(`已${action}供应商「${row.name}」`)
+  } catch {}
 }
 
 const getLevelType = (level) => {
@@ -350,13 +488,131 @@ const getAvatarColor = (name) => {
   flex-shrink: 0;
 }
 
-.text-success {
-  color: #67c23a;
-}
-
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+.text-success {
+  color: #67c23a;
+}
+
+.supplier-detail {
+  padding: 0 8px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.detail-header .header-info {
+  flex: 1;
+}
+
+.supplier-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 8px 0;
+}
+
+.supplier-meta {
+  display: flex;
+  align-items: center;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 12px 0;
+  padding-left: 8px;
+  border-left: 3px solid #409eff;
+}
+
+.score-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.score-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.score-label {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.score-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-num {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  width: 50px;
+  text-align: right;
+}
+
+.history-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.history-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.history-content {
+  flex: 1;
+}
+
+.history-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.history-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.text-success {
+  color: #67c23a;
 }
 </style>

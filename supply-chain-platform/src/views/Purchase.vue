@@ -126,7 +126,7 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small">详情</el-button>
-            <el-button v-if="row.status === 'pending'" type="success" link size="small">审批</el-button>
+            <el-button v-if="row.status === 'pending' || row.status === 'approving'" type="success" link size="small" @click="openApprove(row)">审批</el-button>
             <el-button type="info" link size="small">进度</el-button>
           </template>
         </el-table-column>
@@ -145,6 +145,31 @@
     </div>
 
     <el-empty v-if="filteredCount === 0 && !loading" description="没有找到匹配的采购申请" style="padding: 60px 0" />
+
+    <el-dialog v-model="approveVisible" title="采购申请审批" width="520px" :close-on-click-modal="false">
+      <div v-if="currentRow" class="approve-content">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="申请单号">{{ currentRow.orderNo }}</el-descriptions-item>
+          <el-descriptions-item label="申请人">{{ currentRow.applicant }}</el-descriptions-item>
+          <el-descriptions-item label="申请标题" :span="2">{{ currentRow.title }}</el-descriptions-item>
+          <el-descriptions-item label="申请品类">{{ currentRow.category }}</el-descriptions-item>
+          <el-descriptions-item label="紧急程度">
+            <el-tag :type="getUrgencyType(currentRow.urgency)" size="small">{{ currentRow.urgency }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="申请金额" :span="2">¥{{ currentRow.amount.toLocaleString() }}</el-descriptions-item>
+        </el-descriptions>
+        <el-form label-width="80px" style="margin-top: 20px">
+          <el-form-item label="审批意见">
+            <el-input v-model="approveRemark" type="textarea" :rows="3" placeholder="请输入审批意见（可选）" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="approveVisible = false">取消</el-button>
+        <el-button type="danger" @click="handleReject">驳回</el-button>
+        <el-button type="primary" @click="handleApprove">通过</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -159,6 +184,9 @@ const { state, getters, actions } = useStore()
 const currentPage = ref(1)
 const pageSize = ref(10)
 const loading = ref(false)
+const approveVisible = ref(false)
+const currentRow = ref(null)
+const approveRemark = ref('')
 
 const filterForm = computed({
   get: () => state.purchases.filter,
@@ -200,7 +228,27 @@ const handleSearch = () => {
 const handleReset = () => {
   actions.resetPurchaseFilter()
   currentPage.value = 1
-  ElMessage.info('已重置筛选条件')
+  ElMessage.info('已重置筛选条件并返回全部范围')
+}
+
+const openApprove = (row) => {
+  currentRow.value = { ...row }
+  approveRemark.value = ''
+  approveVisible.value = true
+}
+
+const handleApprove = () => {
+  if (!currentRow.value) return
+  actions.approvePurchase(currentRow.value.orderNo, true)
+  ElMessage.success(`已通过 ${currentRow.value.orderNo}`)
+  approveVisible.value = false
+}
+
+const handleReject = () => {
+  if (!currentRow.value) return
+  actions.approvePurchase(currentRow.value.orderNo, false)
+  ElMessage.warning(`已驳回 ${currentRow.value.orderNo}`)
+  approveVisible.value = false
 }
 
 const getUrgencyType = (urgency) => {

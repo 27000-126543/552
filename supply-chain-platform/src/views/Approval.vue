@@ -52,7 +52,7 @@
             <el-button type="primary" link size="small">全部</el-button>
           </div>
           <div class="todo-list">
-            <div v-for="item in filteredTodos" :key="item.id" class="todo-item">
+            <div v-for="item in filteredTodos" :key="item.id" class="todo-item" @click="openTodoDetail(item)">
               <div class="todo-title">{{ item.title }}</div>
               <div class="todo-meta">
                 <span class="todo-type">{{ item.type }}</span>
@@ -154,6 +154,47 @@
         </div>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="todoVisible" :title="dialogTitle" width="600px" :close-on-click-modal="false">
+      <div v-if="currentTodo">
+        <template v-if="currentTodo.type === '调价审批' && priceInfo">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="SKU编码">{{ priceInfo.skuCode }}</el-descriptions-item>
+            <el-descriptions-item label="品类">{{ priceInfo.category }}</el-descriptions-item>
+            <el-descriptions-item label="SKU名称" :span="2">{{ priceInfo.skuName }}</el-descriptions-item>
+            <el-descriptions-item label="当前售价">¥{{ priceInfo.currentPrice.toLocaleString() }}</el-descriptions-item>
+            <el-descriptions-item label="建议售价">
+              <span :class="priceInfo.priceChange >= 0 ? 'text-up' : 'text-down'">
+                ¥{{ priceInfo.suggestedPrice.toLocaleString() }}
+                ({{ priceInfo.priceChange >= 0 ? '+' : '' }}{{ priceInfo.priceChange }}%)
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item label="成本价">¥{{ priceInfo.cost.toLocaleString() }}</el-descriptions-item>
+            <el-descriptions-item label="竞品价格">¥{{ priceInfo.competitorPrice.toLocaleString() }}</el-descriptions-item>
+            <el-descriptions-item label="供需指数">{{ priceInfo.supplyDemand }}%</el-descriptions-item>
+            <el-descriptions-item label="当前状态">
+              <el-tag type="warning" size="small">{{ priceInfo.status }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="调价原因" :span="2">{{ priceInfo.reason }}</el-descriptions-item>
+          </el-descriptions>
+          <el-form label-width="80px" style="margin-top: 20px">
+            <el-form-item label="审批意见">
+              <el-input v-model="approveRemark" type="textarea" :rows="3" placeholder="请输入审批意见（可选）" />
+            </el-form-item>
+          </el-form>
+        </template>
+        <template v-else>
+          <el-empty description="此类型待办暂不支持在线审批，请前往对应模块处理" :image-size="80" />
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="todoVisible = false">取消</el-button>
+        <template v-if="currentTodo && currentTodo.type === '调价审批' && priceInfo">
+          <el-button type="danger" @click="handlePriceReject">驳回</el-button>
+          <el-button type="primary" @click="handlePriceApprove">通过</el-button>
+        </template>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -161,10 +202,27 @@
 import { ref, computed } from 'vue'
 import { Plus, Setting, Document, Tickets, Wallet, PriceTag, OfficeBuilding, Edit, View, MagicStick, User, UserFilled, CircleCheck, Check } from '@element-plus/icons-vue'
 import { useStore } from '../store'
+import { ElMessage } from 'element-plus'
 
-const { state } = useStore()
+const { state, actions } = useStore()
 
 const activeCategory = ref('purchase')
+const todoVisible = ref(false)
+const currentTodo = ref(null)
+const approveRemark = ref('')
+
+const priceInfo = computed(() => {
+  if (!currentTodo.value || currentTodo.value.type !== '调价审批') return null
+  const skuMatch = currentTodo.value.title.match(/(SKU-\d+)/)
+  if (!skuMatch) return null
+  return state.pricings.all.find(p => p.skuCode === skuMatch[1]) || null
+})
+
+const dialogTitle = computed(() => {
+  if (!currentTodo.value) return '待办详情'
+  if (currentTodo.value.type === '调价审批') return `调价审批 - ${currentTodo.value.title}`
+  return currentTodo.value.title
+})
 
 const todoList = computed(() => state.approvalTodos)
 
@@ -198,6 +256,26 @@ const ruleList = ref([
 
 const handleCategorySelect = (key) => {
   activeCategory.value = key
+}
+
+const openTodoDetail = (item) => {
+  currentTodo.value = { ...item }
+  approveRemark.value = ''
+  todoVisible.value = true
+}
+
+const handlePriceApprove = () => {
+  if (!priceInfo.value) return
+  actions.approvePricing(priceInfo.value.skuCode, true)
+  ElMessage.success(`已通过 ${priceInfo.value.skuCode} 调价申请`)
+  todoVisible.value = false
+}
+
+const handlePriceReject = () => {
+  if (!priceInfo.value) return
+  actions.approvePricing(priceInfo.value.skuCode, false)
+  ElMessage.warning(`已驳回 ${priceInfo.value.skuCode} 调价申请`)
+  todoVisible.value = false
 }
 
 const getRuleType = (type) => {
@@ -457,5 +535,15 @@ const getRuleType = (type) => {
   right: -6px;
   font-size: 10px;
   padding: 1px 4px;
+}
+
+.text-up {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+.text-down {
+  color: #67c23a;
+  font-weight: 600;
 }
 </style>

@@ -73,7 +73,7 @@ const defaultState = {
       keyword: '',
       frozen: ''
     },
-    activeTab: 'pending'
+    activeTab: 'all'
   },
   pricings: {
     all: [
@@ -153,7 +153,8 @@ function saveState(stateToSave) {
       pricings: { all: stateToSave.pricings.all },
       warnings: { all: stateToSave.warnings.all },
       approvalTodos: stateToSave.approvalTodos,
-      purchases: { all: stateToSave.purchases.all }
+      purchases: { all: stateToSave.purchases.all },
+      suppliers: { all: stateToSave.suppliers.all }
     }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   } catch (e) {
@@ -241,8 +242,16 @@ const actions = {
   resetSupplierFilter() {
     state.suppliers.filter = { name: '', level: '', accessType: '', category: '' }
   },
+  toggleSupplierStatus(code) {
+    const s = state.suppliers.all.find(x => x.code === code)
+    if (s) {
+      s.status = s.status === 'active' ? 'inactive' : 'active'
+      saveState(state)
+    }
+  },
   resetPurchaseFilter() {
     state.purchases.filter = { orderNo: '', status: '', category: '', dateRange: [], urgency: '', applicant: '' }
+    state.purchases.activeTab = 'all'
   },
   resetWarningFilter() {
     state.warnings.filter = { type: '', level: '', status: '', keyword: '', frozen: '' }
@@ -258,6 +267,15 @@ const actions = {
         state.approvalTodos = state.approvalTodos.filter(t => !t.title.includes(p.skuCode))
       }
     })
+    saveState(state)
+  },
+  approvePurchase(orderNo, pass = true) {
+    const p = state.purchases.all.find(x => x.orderNo === orderNo)
+    if (p && (p.status === 'pending' || p.status === 'approving')) {
+      p.status = pass ? 'approved' : 'rejected'
+      p.currentApprover = pass ? '已完成' : '已驳回'
+      state.approvalTodos = state.approvalTodos.filter(t => t.type !== '采购审批' || t.title !== p.title)
+    }
     saveState(state)
   },
   handleWarning(warningNo, handler = '管理员') {
