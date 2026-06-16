@@ -120,7 +120,7 @@
             </div>
             <div class="flow-line">↓</div>
             <div class="flow-node flow-end">
-              <div class="node-icon"><el-icon><Finish /></el-icon></div>
+              <div class="node-icon"><el-icon><Check /></el-icon></div>
               <div class="node-label">结束</div>
             </div>
           </div>
@@ -159,7 +159,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Plus, Setting, Document, Tickets, Wallet, PriceTag, OfficeBuilding, Edit, View, MagicStick, User, UserFilled, CircleCheck, Finish } from '@element-plus/icons-vue'
+import { Plus, Setting, Document, Tickets, Wallet, PriceTag, OfficeBuilding, Edit, View, MagicStick, User, UserFilled, CircleCheck, Check } from '@element-plus/icons-vue'
 import { useStore } from '../store'
 
 const { state } = useStore()

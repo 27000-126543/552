@@ -154,26 +154,15 @@ import { Plus, Upload, Document, CircleCheck, CircleClose, Clock, Search, Refres
 import { useStore } from '../store'
 import { ElMessage } from 'element-plus'
 
-const { state, actions } = useStore()
+const { state, getters, actions } = useStore()
 
 const currentPage = ref(1)
 const pageSize = ref(10)
 const loading = ref(false)
 
-const extraFilter = reactive({
-  urgency: '',
-  applicant: ''
-})
-
 const filterForm = computed({
-  get: () => ({ ...state.purchases.filter, ...extraFilter }),
-  set: (val) => {
-    state.purchases.filter.orderNo = val.orderNo
-    state.purchases.filter.status = val.status
-    state.purchases.filter.category = val.category
-    extraFilter.urgency = val.urgency
-    extraFilter.applicant = val.applicant
-  }
+  get: () => state.purchases.filter,
+  set: (val) => { state.purchases.filter = val }
 })
 
 const activeTab = computed({
@@ -181,20 +170,13 @@ const activeTab = computed({
   set: (val) => { state.purchases.activeTab = val }
 })
 
-const filteredList = computed(() => {
-  const list = state.getters.filteredPurchases.value
-  return list.filter(item => {
-    if (extraFilter.urgency && item.urgency !== extraFilter.urgency) return false
-    if (extraFilter.applicant && !item.applicant.includes(extraFilter.applicant)) return false
-    return true
-  })
-})
+const filteredList = computed(() => getters.filteredPurchases.value)
 
 const filteredCount = computed(() => filteredList.value.length)
 const pendingCount = computed(() => state.purchases.all.filter(p => p.status === 'pending').length)
 const approvedCount = computed(() => state.purchases.all.filter(p => p.status === 'approved').length)
 const rejectedCount = computed(() => state.purchases.all.filter(p => p.status === 'rejected').length)
-const todoCount = computed(() => 8)
+const todoCount = computed(() => state.purchases.all.filter(p => p.status === 'pending' || p.status === 'approving').length)
 
 const pagedList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -217,8 +199,6 @@ const handleSearch = () => {
 
 const handleReset = () => {
   actions.resetPurchaseFilter()
-  extraFilter.urgency = ''
-  extraFilter.applicant = ''
   currentPage.value = 1
   ElMessage.info('已重置筛选条件')
 }

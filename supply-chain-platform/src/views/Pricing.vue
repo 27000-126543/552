@@ -266,7 +266,7 @@ import { MagicStick, Setting, Calendar, Goods, TrendCharts, Wallet, Warning, Sea
 import { useStore } from '../store'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-const { state, actions } = useStore()
+const { state, getters, actions } = useStore()
 
 const selectedCategory = ref('all')
 const currentPage = ref(1)
@@ -276,36 +276,14 @@ const detailVisible = ref(false)
 const currentItem = ref(null)
 const tableRef = ref(null)
 
-const extraFilter = reactive({
-  keyword: '',
-  category: ''
-})
-
 const filterForm = computed({
-  get: () => ({ status: state.pricings.filter?.status || '', ...extraFilter }),
-  set: (val) => {
-    if (!state.pricings.filter) {
-      state.pricings.filter = { status: '' }
-    }
-    state.pricings.filter.status = val.status
-    extraFilter.keyword = val.keyword
-    extraFilter.category = val.category
-  }
+  get: () => state.pricings.filter,
+  set: (val) => { state.pricings.filter = val }
 })
 
 const allPricings = computed(() => state.pricings.all)
 
-const filteredList = computed(() => {
-  return allPricings.value.filter(item => {
-    if (state.pricings.filter?.status && item.status !== state.pricings.filter.status) return false
-    if (extraFilter.keyword) {
-      const kw = extraFilter.keyword.toLowerCase()
-      if (!item.skuCode.toLowerCase().includes(kw) && !item.skuName.toLowerCase().includes(kw)) return false
-    }
-    if (extraFilter.category && item.category !== extraFilter.category) return false
-    return true
-  })
-})
+const filteredList = computed(() => getters.filteredPricings.value)
 
 const filteredCount = computed(() => filteredList.value.length)
 const totalCount = computed(() => allPricings.value.length)
@@ -385,11 +363,7 @@ const handleSearch = () => {
 }
 
 const handleReset = () => {
-  if (state.pricings.filter) {
-    state.pricings.filter.status = ''
-  }
-  extraFilter.keyword = ''
-  extraFilter.category = ''
+  actions.resetPricingFilter()
   currentPage.value = 1
   ElMessage.info('已重置筛选条件')
 }

@@ -169,7 +169,7 @@ import { Plus, Upload, Connection, Search, RefreshLeft } from '@element-plus/ico
 import { useStore } from '../store'
 import { ElMessage } from 'element-plus'
 
-const { state, actions } = useStore()
+const { state, getters, actions } = useStore()
 
 const viewType = ref('table')
 const currentPage = ref(1)
@@ -181,7 +181,7 @@ const filterForm = computed({
   set: (val) => { state.suppliers.filter = val }
 })
 
-const filteredList = computed(() => state.getters.filteredSuppliers.value)
+const filteredList = computed(() => getters.filteredSuppliers.value)
 const filteredCount = computed(() => filteredList.value.length)
 const totalCount = computed(() => state.suppliers.all.length)
 const activeCount = computed(() => state.suppliers.all.filter(s => s.status === 'active').length)

@@ -41,7 +41,7 @@
       </el-col>
       <el-col :span="6">
         <div class="stat-card stat-success">
-          <div class="stat-icon"><el-icon><Shield /></el-icon></div>
+          <div class="stat-icon"><el-icon><Lock /></el-icon></div>
           <div class="stat-content">
             <div class="stat-value">98.5%</div>
             <div class="stat-label">预警准确率</div>
@@ -222,11 +222,11 @@
 
 <script setup>
 import { ref, computed, reactive } from 'vue'
-import { Bell, List, Warning, Clock, CircleCheck, Shield, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { Bell, List, Warning, Clock, CircleCheck, Lock, Search, RefreshLeft } from '@element-plus/icons-vue'
 import { useStore } from '../store'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-const { state, actions } = useStore()
+const { state, getters, actions } = useStore()
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -234,20 +234,9 @@ const loading = ref(false)
 const detailVisible = ref(false)
 const currentWarning = ref(null)
 
-const extraFilter = reactive({
-  keyword: '',
-  frozen: ''
-})
-
 const filterForm = computed({
-  get: () => ({ ...state.warnings.filter, ...extraFilter }),
-  set: (val) => {
-    state.warnings.filter.type = val.type
-    state.warnings.filter.level = val.level
-    state.warnings.filter.status = val.status
-    extraFilter.keyword = val.keyword
-    extraFilter.frozen = val.frozen
-  }
+  get: () => state.warnings.filter,
+  set: (val) => { state.warnings.filter = val }
 })
 
 const activeTab = computed({
@@ -260,18 +249,7 @@ const tabText = computed(() => {
   return map[activeTab.value] || ''
 })
 
-const filteredList = computed(() => {
-  const list = state.getters.filteredWarnings.value
-  return list.filter(item => {
-    if (extraFilter.keyword && !item.warningNo.toLowerCase().includes(extraFilter.keyword.toLowerCase()) &&
-        !item.description.includes(extraFilter.keyword)) return false
-    if (extraFilter.frozen !== '' && extraFilter.frozen !== undefined) {
-      const isFrozen = extraFilter.frozen === 'true' || extraFilter.frozen === true
-      if (item.frozen !== isFrozen) return false
-    }
-    return true
-  })
-})
+const filteredList = computed(() => getters.filteredWarnings.value)
 
 const filteredCount = computed(() => filteredList.value.length)
 const pendingCount = computed(() => state.warnings.all.filter(w => w.status === '待处理').length)
@@ -358,8 +336,6 @@ const handleSearch = () => {
 
 const handleReset = () => {
   actions.resetWarningFilter()
-  extraFilter.keyword = ''
-  extraFilter.frozen = ''
   currentPage.value = 1
   ElMessage.info('已重置筛选条件')
 }

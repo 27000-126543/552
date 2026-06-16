@@ -1,6 +1,8 @@
-import { reactive, computed } from 'vue'
+import { reactive, computed, watch } from 'vue'
 
-const state = reactive({
+const STORAGE_KEY = 'supply_chain_platform_state'
+
+const defaultState = {
   user: {
     isLoggedIn: false,
     username: '',
@@ -47,7 +49,9 @@ const state = reactive({
       orderNo: '',
       status: '',
       category: '',
-      dateRange: []
+      dateRange: [],
+      urgency: '',
+      applicant: ''
     },
     activeTab: 'all'
   },
@@ -65,7 +69,9 @@ const state = reactive({
     filter: {
       type: '',
       level: '',
-      status: ''
+      status: '',
+      keyword: '',
+      frozen: ''
     },
     activeTab: 'pending'
   },
@@ -81,7 +87,12 @@ const state = reactive({
       { skuCode: 'SKU-008', skuName: '有机坚果礼盒装', category: '食品饮料', currentPrice: 168, suggestedPrice: 158, priceChange: -6.0, cost: 98, competitorPrice: 178, supplyDemand: 55, reason: '节日后需求回落', status: '待审批' },
       { skuCode: 'SKU-009', skuName: '夏季连衣裙', category: '服装鞋帽', currentPrice: 328, suggestedPrice: 288, priceChange: -12.2, cost: 150, competitorPrice: 318, supplyDemand: 50, reason: '换季促销', status: '待审批' },
       { skuCode: 'SKU-010', skuName: '北欧风格沙发', category: '家居用品', currentPrice: 3299, suggestedPrice: 3499, priceChange: 6.1, cost: 2200, competitorPrice: 3599, supplyDemand: 82, reason: '原材料成本上涨', status: '待审批' }
-    ]
+    ],
+    filter: {
+      status: '',
+      keyword: '',
+      category: ''
+    }
   },
   approvalTodos: [
     { id: 1, title: '智能手机批量采购申请', type: '采购审批', time: '10分钟前' },
@@ -89,7 +100,12 @@ const state = reactive({
     { id: 3, title: '6月供应商货款结算', type: '付款结算', time: '2小时前' },
     { id: 4, title: '新供应商准入审核', type: '供应商准入', time: '昨天' },
     { id: 5, title: 'SKU-001 调价审批', type: '调价审批', time: '30分钟前' },
-    { id: 6, title: 'SKU-002 调价审批', type: '调价审批', time: '25分钟前' }
+    { id: 6, title: 'SKU-002 调价审批', type: '调价审批', time: '25分钟前' },
+    { id: 7, title: 'SKU-004 调价审批', type: '调价审批', time: '20分钟前' },
+    { id: 8, title: 'SKU-006 调价审批', type: '调价审批', time: '15分钟前' },
+    { id: 9, title: 'SKU-008 调价审批', type: '调价审批', time: '10分钟前' },
+    { id: 10, title: 'SKU-009 调价审批', type: '调价审批', time: '5分钟前' },
+    { id: 11, title: 'SKU-010 调价审批', type: '调价审批', time: '刚刚' }
   ],
   skuList: [
     { skuCode: 'SKU-001', skuName: '智能手机 128G 黑色', category: '电子产品', stock: 2580, safeStock: 500, stockValue: 5160000, turnoverDays: 28, warehouse: '华东仓' },
@@ -103,7 +119,49 @@ const state = reactive({
     { skuCode: 'SKU-009', skuName: '真丝连衣裙 夏季款', category: '服装鞋帽', stock: 420, safeStock: 150, stockValue: 294000, turnoverDays: 55, warehouse: '华东仓' },
     { skuCode: 'SKU-010', skuName: '北欧风格餐桌 1.4米', category: '家居用品', stock: 85, safeStock: 50, stockValue: 425000, turnoverDays: 75, warehouse: '华北仓' }
   ]
-})
+}
+
+function loadState() {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      return deepMerge(defaultState, parsed)
+    }
+  } catch (e) {
+    console.warn('Failed to load state from sessionStorage:', e)
+  }
+  return JSON.parse(JSON.stringify(defaultState))
+}
+
+function deepMerge(target, source) {
+  const result = { ...target }
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(result[key] || {}, source[key])
+    } else if (source[key] !== undefined) {
+      result[key] = source[key]
+    }
+  }
+  return result
+}
+
+function saveState(stateToSave) {
+  try {
+    const data = {
+      user: stateToSave.user,
+      pricings: { all: stateToSave.pricings.all },
+      warnings: { all: stateToSave.warnings.all },
+      approvalTodos: stateToSave.approvalTodos,
+      purchases: { all: stateToSave.purchases.all }
+    }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  } catch (e) {
+    console.warn('Failed to save state to sessionStorage:', e)
+  }
+}
+
+const state = reactive(loadState())
 
 const getters = {
   filteredSuppliers: computed(() => {
@@ -123,8 +181,10 @@ const getters = {
       if (f.orderNo && !item.orderNo.toLowerCase().includes(f.orderNo.toLowerCase())) return false
       if (f.status && item.status !== f.status) return false
       if (f.category && item.category !== f.category) return false
-      if (tab === 'pending' && item.status !== 'pending' && item.status !== 'approving') return false
+      if (f.urgency && item.urgency !== f.urgency) return false
+      if (f.applicant && !item.applicant.includes(f.applicant)) return false
       if (tab === 'my' && item.applicant !== '张三') return false
+      if (tab === 'todo' && item.status !== 'pending' && item.status !== 'approving') return false
       return true
     })
   }),
@@ -134,6 +194,14 @@ const getters = {
     return state.warnings.all.filter(item => {
       if (f.type && item.type !== f.type) return false
       if (f.level && item.level !== f.level) return false
+      if (f.keyword) {
+        const kw = f.keyword.toLowerCase()
+        if (!item.warningNo.toLowerCase().includes(kw) && !item.description.includes(f.keyword)) return false
+      }
+      if (f.frozen !== '' && f.frozen !== undefined && f.frozen !== null) {
+        const isFrozen = f.frozen === 'true' || f.frozen === true
+        if (item.frozen !== isFrozen) return false
+      }
       if (tab === 'pending' && item.status !== '待处理') return false
       if (tab === 'processing' && item.status !== '处理中') return false
       if (tab === 'resolved' && item.status !== '已处理') return false
@@ -141,7 +209,19 @@ const getters = {
     })
   }),
   pendingPricings: computed(() => state.pricings.all.filter(p => p.status === '待审批')),
-  priceApprovalTodos: computed(() => state.approvalTodos.filter(t => t.type === '调价审批'))
+  priceApprovalTodos: computed(() => state.approvalTodos.filter(t => t.type === '调价审批')),
+  filteredPricings: computed(() => {
+    const f = state.pricings.filter
+    return state.pricings.all.filter(item => {
+      if (f.status && item.status !== f.status) return false
+      if (f.keyword) {
+        const kw = f.keyword.toLowerCase()
+        if (!item.skuCode.toLowerCase().includes(kw) && !item.skuName.toLowerCase().includes(kw)) return false
+      }
+      if (f.category && item.category !== f.category) return false
+      return true
+    })
+  })
 }
 
 const actions = {
@@ -149,21 +229,26 @@ const actions = {
     state.user.isLoggedIn = true
     state.user.username = username
     state.user.avatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+    saveState(state)
     return true
   },
   logout() {
     state.user.isLoggedIn = false
     state.user.username = ''
     state.user.avatar = ''
+    saveState(state)
   },
   resetSupplierFilter() {
     state.suppliers.filter = { name: '', level: '', accessType: '', category: '' }
   },
   resetPurchaseFilter() {
-    state.purchases.filter = { orderNo: '', status: '', category: '', dateRange: [] }
+    state.purchases.filter = { orderNo: '', status: '', category: '', dateRange: [], urgency: '', applicant: '' }
   },
   resetWarningFilter() {
-    state.warnings.filter = { type: '', level: '', status: '' }
+    state.warnings.filter = { type: '', level: '', status: '', keyword: '', frozen: '' }
+  },
+  resetPricingFilter() {
+    state.pricings.filter = { status: '', keyword: '', category: '' }
   },
   approvePricing(skuCodes, pass = true) {
     const codes = Array.isArray(skuCodes) ? skuCodes : [skuCodes]
@@ -173,12 +258,14 @@ const actions = {
         state.approvalTodos = state.approvalTodos.filter(t => !t.title.includes(p.skuCode))
       }
     })
+    saveState(state)
   },
   handleWarning(warningNo, handler = '管理员') {
     const w = state.warnings.all.find(x => x.warningNo === warningNo)
     if (w) {
       w.status = '处理中'
       w.handler = handler
+      saveState(state)
     }
   },
   dispatchWarning(warningNo) {
@@ -189,12 +276,14 @@ const actions = {
       w.frozen = true
       const num = parseInt(warningNo.replace('WARN-', ''))
       w.workOrder = `WO-${num.toString().padStart(8, '0')}`
+      saveState(state)
     }
   },
   resolveWarning(warningNo) {
     const w = state.warnings.all.find(x => x.warningNo === warningNo)
     if (w) {
       w.status = '已处理'
+      saveState(state)
     }
   },
   addPriceApprovalTodo(item) {
@@ -206,9 +295,18 @@ const actions = {
         type: '调价审批',
         time: '刚刚'
       })
+      saveState(state)
     }
   }
 }
+
+watch(
+  () => state,
+  () => {
+    saveState(state)
+  },
+  { deep: true }
+)
 
 export function useStore() {
   return { state, getters, actions }
